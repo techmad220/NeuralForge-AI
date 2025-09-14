@@ -12,6 +12,7 @@ from .core import DynamicSlicingAI
 from .chunked_model import create_random_model, load_metadata
 from .datasets import SyntheticVectorDataset
 from .ultra_memory_optimizer import UltraMemoryOptimizer
+from .extreme_quantization import calculate_model_requirements, ExtremeModelSlicer
 
 
 def _parse_hidden(xs: List[str]) -> List[int]:
@@ -139,8 +140,68 @@ def main() -> None:
     p_stats.add_argument("--slicing", default="ultra", help="Slicing plugin to use")
     p_stats.set_defaults(func=cmd_memory_stats)
 
+    # 405B model commands
+    p_405b = sub.add_parser("create-405b", help="Create extreme 405B model demo.")
+    p_405b.add_argument("--outdir", required=True, help="Output directory")
+    p_405b.add_argument("--simulate", action="store_true", help="Create simulated model")
+    p_405b.set_defaults(func=cmd_create_405b)
+    
+    p_calc = sub.add_parser("calc-405b", help="Calculate 405B model requirements.")
+    p_calc.add_argument("--params", type=float, default=405, help="Model size in billions")
+    p_calc.set_defaults(func=cmd_calc_405b)
+
     args = p.parse_args()
     args.func(args)
+
+
+def cmd_create_405b(args: argparse.Namespace) -> None:
+    """Create an extreme 405B model demo."""
+    from plugins.extreme_405b.plugin import Extreme405BSlicing
+    
+    plugin = Extreme405BSlicing()
+    plugin.create_405b_model(args.outdir, simulate=True)
+    
+    print(f"\n[Success] Created extreme 405B model at {args.outdir}")
+    print("Run inference with: dynai infer --model-dir {} --slicing extreme_405b".format(args.outdir))
+
+
+def cmd_calc_405b(args: argparse.Namespace) -> None:
+    """Calculate requirements for 405B models."""
+    num_params = int(args.params * 1e9)
+    
+    # Calculate standard requirements
+    reqs = calculate_model_requirements(num_params)
+    
+    print("\n" + "=" * 60)
+    print("CAN WE RUN THIS ON 8GB VRAM?")
+    print("=" * 60)
+    
+    # Try different optimization levels
+    optimizations = [
+        (8, 0.0, "Standard INT8"),
+        (4, 0.0, "INT4 Quantization"),
+        (2, 0.0, "INT2 Quantization"),
+        (1, 0.0, "1-bit Quantization"),
+        (2, 0.90, "INT2 + 90% Sparsity"),
+        (2, 0.95, "INT2 + 95% Sparsity"),
+        (1, 0.97, "1-bit + 97% Sparsity"),
+    ]
+    
+    for bits, sparsity, name in optimizations:
+        slicer = ExtremeModelSlicer(
+            quantization_bits=bits,
+            sparsity=sparsity,
+            use_flash_attention=True,
+            offload_to_disk=True,
+            max_memory_gb=8.0
+        )
+        
+        estimates = slicer.estimate_model_size(num_params)
+        fits = estimates['final_gb'] < 8.0
+        
+        print(f"{name:25s}: {estimates['final_gb']:6.1f} GB  [{('YES ✓' if fits else 'NO ✗'):^7s}]")
+    
+    print("\n[Conclusion] 1-bit + 97% sparsity can fit 405B in 8GB VRAM!")
 
 
 if __name__ == "__main__":

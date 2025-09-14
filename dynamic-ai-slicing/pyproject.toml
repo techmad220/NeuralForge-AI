@@ -18,11 +18,12 @@ dynai = "dynai.cli:main"
 [tool.setuptools]
 package-dir = { "" = "src" }
 # List packages explicitly. `plugins` is a top-level package inside `src`.
-packages = ["dynai", "plugins", "plugins.slicing_windowed", "plugins.continual_kd_head", "plugins.ultra_slicing"]
+packages = ["dynai", "plugins", "plugins.slicing_windowed", "plugins.continual_kd_head", "plugins.ultra_slicing", "plugins.extreme_405b"]
 
 [project.entry-points."dynai.slicing"]
 windowed = "plugins.slicing_windowed.plugin:WindowedSlicing"
 ultra = "plugins.ultra_slicing.plugin:UltraSlicing"
+extreme_405b = "plugins.extreme_405b.plugin:Extreme405BSlicing"
 
 [project.entry-points."dynai.continual"]
 kd_head = "plugins.continual_kd_head.plugin:KDHeadContinual"
