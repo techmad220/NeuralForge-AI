@@ -11,6 +11,7 @@ import numpy as np
 from .core import DynamicSlicingAI
 from .chunked_model import create_random_model, load_metadata
 from .datasets import SyntheticVectorDataset
+from .ultra_memory_optimizer import UltraMemoryOptimizer
 
 
 def _parse_hidden(xs: List[str]) -> List[int]:
@@ -48,6 +49,44 @@ def cmd_learn_from(args: argparse.Namespace) -> None:
     print("Student head updated via KD-head.")
 
 
+def cmd_ultra_model(args: argparse.Namespace) -> None:
+    """Create ultra-optimized model with compression and quantization."""
+    hidden = _parse_hidden(args.hidden)
+    optimizer = UltraMemoryOptimizer(
+        max_memory_mb=args.memory_limit,
+        quantize_bits=args.bits,
+        cache_size=args.cache_size
+    )
+    
+    optimizer.create_optimized_model(
+        outdir=args.outdir,
+        d_in=args.d_in,
+        hidden=hidden,
+        d_out=args.d_out,
+        seed=args.seed
+    )
+    
+    # Show optimization stats
+    stats = optimizer.get_memory_stats()
+    print(f"Created ultra-optimized model at {args.outdir}")
+    print(f"Quantization: {args.bits}-bit weights")
+    print(f"Memory limit: {args.memory_limit}MB")
+    print(f"Cache size: {args.cache_size} layers")
+
+
+def cmd_memory_stats(args: argparse.Namespace) -> None:
+    """Show detailed memory and optimization statistics."""
+    ai = DynamicSlicingAI(args.model_dir, slicing=args.slicing)
+    
+    # Try to get stats from ultra slicing plugin
+    if hasattr(ai.slicing, 'get_optimization_stats'):
+        stats = ai.slicing.get_optimization_stats()
+        print(json.dumps(stats, indent=2))
+    else:
+        print("Memory stats only available with ultra slicing plugin")
+        print("Use --slicing ultra to enable detailed memory monitoring")
+
+
 def main() -> None:
     p = argparse.ArgumentParser("dynai")
     sub = p.add_subparsers(required=True)
@@ -81,6 +120,24 @@ def main() -> None:
     p_kd.add_argument("--slicing", default=None)
     p_kd.add_argument("--continual", default=None)
     p_kd.set_defaults(func=cmd_learn_from)
+
+    # Ultra-optimized model creation
+    p_ultra = sub.add_parser("ultra-model", help="Create ultra-optimized model with compression.")
+    p_ultra.add_argument("--outdir", required=True)
+    p_ultra.add_argument("--d-in", type=int, required=True)
+    p_ultra.add_argument("--hidden", nargs="+", required=True, help="e.g. --hidden 32 32")
+    p_ultra.add_argument("--d-out", type=int, required=True)
+    p_ultra.add_argument("--seed", type=int, default=1)
+    p_ultra.add_argument("--memory-limit", type=int, default=256, help="Memory limit in MB")
+    p_ultra.add_argument("--bits", type=int, default=8, choices=[4, 8], help="Quantization bits")
+    p_ultra.add_argument("--cache-size", type=int, default=3, help="Layer cache size")
+    p_ultra.set_defaults(func=cmd_ultra_model)
+
+    # Memory statistics
+    p_stats = sub.add_parser("memory-stats", help="Show memory and optimization statistics.")
+    p_stats.add_argument("--model-dir", required=True)
+    p_stats.add_argument("--slicing", default="ultra", help="Slicing plugin to use")
+    p_stats.set_defaults(func=cmd_memory_stats)
 
     args = p.parse_args()
     args.func(args)

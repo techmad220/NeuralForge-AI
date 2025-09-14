@@ -1,0 +1,17 @@
+{
+  "d_in": 128,
+  "hidden": [
+    512,
+    256,
+    128
+  ],
+  "d_out": 10,
+  "layers": 4,
+  "activation": "relu",
+  "output": "logits",
+  "optimization": {
+    "quantize_bits": 8,
+    "compressed": true,
+    "total_params": 231562
+  }
+}

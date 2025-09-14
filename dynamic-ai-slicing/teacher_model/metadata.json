@@ -1,0 +1,11 @@
+{
+  "d_in": 8,
+  "hidden": [
+    16,
+    16
+  ],
+  "d_out": 4,
+  "layers": 3,
+  "activation": "relu",
+  "output": "logits"
+}

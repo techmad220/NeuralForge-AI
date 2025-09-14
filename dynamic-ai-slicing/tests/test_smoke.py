@@ -17,7 +17,7 @@ def test_end_to_end(tmp_path):
     x = np.ones((6,), dtype=np.float32)
     p = ai.run_inference(x)
     assert p.shape == (3,)
-    assert abs(p.sum() - 1.0) < 1e‑5
+    assert abs(p.sum() - 1.0) < 1e-5
 
     ds = SyntheticVectorDataset(d_in=6, n=64, seed=0)
     ai.learn_from_other_ai(str(teacher), ds, lambda_l2=0.1, temperature=2.0)
