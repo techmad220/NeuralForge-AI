@@ -32,6 +32,107 @@ def load_slicing_plugins() -> Dict[str, Type[SlicingPlugin]]:
             plugins["windowed"] = WindowedSlicing
         except Exception:
             pass
+
+        # Load new quantum-inspired plugins
+        try:
+            from plugins.quantum_holographic.plugin import QuantumHolographicPlugin  # type: ignore
+            plugins["quantum_holographic"] = QuantumHolographicPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.temporal_multiplexing.plugin import TemporalMultiplexingPlugin  # type: ignore
+            plugins["temporal_multiplexing"] = TemporalMultiplexingPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.adaptive_routing.plugin import AdaptiveRoutingPlugin  # type: ignore
+            plugins["adaptive_routing"] = AdaptiveRoutingPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.predictive_cache.plugin import PredictiveCachePlugin  # type: ignore
+            plugins["predictive_cache"] = PredictiveCachePlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.neural_architecture_search.plugin import NeuralArchitectureSearchPlugin  # type: ignore
+            plugins["neural_architecture_search"] = NeuralArchitectureSearchPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.quantum_superposition.plugin import QuantumSuperpositionPlugin  # type: ignore
+            plugins["quantum_superposition"] = QuantumSuperpositionPlugin
+        except Exception:
+            pass
+
+        # Also load existing extreme plugins
+        try:
+            from plugins.extreme_405b.plugin import Extreme405BSlicing  # type: ignore
+            plugins["extreme_405b"] = Extreme405BSlicing
+        except Exception:
+            pass
+
+        try:
+            from plugins.ultra_slicing.plugin import UltraSlicing  # type: ignore
+            plugins["ultra_slicing"] = UltraSlicing
+        except Exception:
+            pass
+
+        # Load R-Tuning and Deep Thinking plugins
+        try:
+            from plugins.r_tuning.plugin import RTuningPlugin  # type: ignore
+            plugins["r_tuning"] = RTuningPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.deep_thinking.plugin import DeepThinkingPlugin  # type: ignore
+            plugins["deep_thinking"] = DeepThinkingPlugin
+        except Exception:
+            pass
+
+        # Load Memory Persistence plugin
+        try:
+            from plugins.memory_persistence.plugin import MemoryPersistencePlugin  # type: ignore
+            plugins["memory_persistence"] = MemoryPersistencePlugin
+        except Exception:
+            pass
+
+        # Load novel slicing techniques
+        try:
+            from plugins.novel_4d_slicing.plugin import Novel4DSlicingPlugin  # type: ignore
+            plugins["novel_4d_slicing"] = Novel4DSlicingPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.fractal_recursive_slicing.plugin import FractalRecursiveSlicingPlugin  # type: ignore
+            plugins["fractal_recursive_slicing"] = FractalRecursiveSlicingPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.neural_pathway_slicing.plugin import NeuralPathwaySlicingPlugin  # type: ignore
+            plugins["neural_pathway_slicing"] = NeuralPathwaySlicingPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.spectral_domain_slicing.plugin import SpectralDomainSlicingPlugin  # type: ignore
+            plugins["spectral_domain_slicing"] = SpectralDomainSlicingPlugin
+        except Exception:
+            pass
+
+        try:
+            from plugins.topological_slicing.plugin import TopologicalSlicingPlugin  # type: ignore
+            plugins["topological_slicing"] = TopologicalSlicingPlugin
+        except Exception:
+            pass
     return plugins
 
 

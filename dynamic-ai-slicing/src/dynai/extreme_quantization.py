@@ -20,10 +20,76 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pickle
 import zlib
+
+
+class CompressionAnalyzer:
+    """Analyzes and estimates compression ratios for large models."""
+
+    def estimate_405b_compression(self, precision: str = 'int2', sparsity: float = 0.95) -> Dict[str, Any]:
+        """Estimate compression for 405B parameter model."""
+        base_params = 405_000_000_000
+        bytes_per_param = {
+            'fp32': 4,
+            'fp16': 2,
+            'int8': 1,
+            'int4': 0.5,
+            'int2': 0.25,
+            'int1': 0.125
+        }
+
+        # Calculate base size
+        base_size_gb = (base_params * bytes_per_param.get(precision, 4)) / (1024**3)
+
+        # Apply sparsity reduction
+        effective_size_gb = base_size_gb * (1 - sparsity)
+
+        # Additional compression from techniques
+        compression_factor = 1.0
+        if precision in ['int2', 'int1']:
+            compression_factor *= 0.8  # Further compression possible
+
+        final_size_gb = effective_size_gb * compression_factor
+
+        return {
+            'base_params': base_params,
+            'precision': precision,
+            'sparsity': sparsity,
+            'base_size_gb': base_size_gb,
+            'final_size_gb': final_size_gb,
+            'compression_ratio': 1620.0 / final_size_gb  # FP32 baseline
+        }
+
+    def analyze_model(self, weights: List[np.ndarray]) -> Dict[str, Any]:
+        """Analyze compression potential of model weights."""
+        total_params = sum(w.size for w in weights)
+        total_bytes = sum(w.nbytes for w in weights)
+
+        # Analyze sparsity
+        total_zeros = sum(np.sum(w == 0) for w in weights)
+        sparsity = total_zeros / total_params
+
+        # Analyze value distribution
+        all_values = np.concatenate([w.flatten() for w in weights])
+        unique_values = len(np.unique(all_values))
+
+        # Estimate compression potential
+        if unique_values < 256:
+            possible_bits = np.ceil(np.log2(unique_values))
+        else:
+            possible_bits = 8
+
+        return {
+            'total_params': total_params,
+            'total_size_mb': total_bytes / (1024**2),
+            'sparsity': sparsity,
+            'unique_values': unique_values,
+            'min_bits_needed': possible_bits,
+            'potential_compression': 32 / possible_bits
+        }
 
 
 # Calculate requirements for 405B model
@@ -81,6 +147,20 @@ def calculate_model_requirements(num_params: int = 405_000_000_000):
 
 
 @dataclass
+class BitNetQuantized:
+    """Quantized tensor with dequantization method."""
+    weights: np.ndarray
+    scale: float
+    zero_point: float
+    dequantize: Any  # Callable to dequantize
+
+    @property
+    def compressed_size(self) -> int:
+        """Return compressed size in bytes."""
+        return self.weights.nbytes
+
+
+@dataclass
 class BitTensor:
     """1-bit or 2-bit packed tensor representation."""
     data: np.ndarray  # Packed bits
@@ -94,10 +174,88 @@ class BitTensor:
         """Calculate actual memory usage."""
         return self.data.nbytes + 64  # Include metadata
 
+    @property
+    def compressed_size(self) -> int:
+        """Return compressed size in bytes."""
+        return self.memory_bytes
+
+    def dequantize(self) -> np.ndarray:
+        """Dequantize the BitTensor back to float32."""
+        if self.bits == 1:
+            return ExtremeQuantizer.dequantize_1bit(self)
+        elif self.bits == 2:
+            return ExtremeQuantizer.dequantize_2bit(self)
+        else:
+            raise ValueError(f"Unsupported bit width: {self.bits}")
+
 
 class ExtremeQuantizer:
     """Extreme quantization down to 1-bit."""
-    
+
+    def quantize_to_bitnet(self, tensor: np.ndarray) -> BitTensor:
+        """Quantize to BitNet (1-bit) format."""
+        return self.quantize_1bit(tensor)
+
+    def quantize_to_2bit(self, tensor: np.ndarray) -> BitTensor:
+        """Quantize to 2-bit format."""
+        return self.quantize_2bit(tensor)
+
+    def quantize_to_4bit(self, tensor: np.ndarray) -> BitNetQuantized:
+        """Quantize to 4-bit format."""
+        scale = np.abs(tensor).max() / 7.5
+        quantized = np.clip(np.round(tensor / scale), -8, 7).astype(np.int8)
+        return BitNetQuantized(
+            weights=quantized,
+            scale=scale,
+            zero_point=0.0,
+            dequantize=lambda: quantized.astype(np.float32) * scale
+        )
+
+    def quantize_to_int8(self, tensor: np.ndarray) -> BitNetQuantized:
+        """Quantize to INT8 format."""
+        scale = np.abs(tensor).max() / 127
+        quantized = np.clip(np.round(tensor / scale), -128, 127).astype(np.int8)
+        return BitNetQuantized(
+            weights=quantized,
+            scale=scale,
+            zero_point=0.0,
+            dequantize=lambda: quantized.astype(np.float32) * scale
+        )
+
+    @staticmethod
+    def quantize_2bit(tensor: np.ndarray) -> BitTensor:
+        """2-bit quantization to {-1, -0.33, 0.33, 1}."""
+        scale = np.abs(tensor).max()
+
+        # Map to 4 levels
+        normalized = tensor / (scale + 1e-8)
+        levels = np.array([-1, -0.33, 0.33, 1])
+
+        # Quantize to nearest level
+        quantized = np.zeros_like(normalized, dtype=np.uint8)
+        for i, level in enumerate(levels):
+            mask = np.abs(normalized - level) < 0.5
+            quantized[mask] = i
+
+        # Pack 4 values per byte (2 bits each)
+        packed_shape = (np.prod(tensor.shape) + 3) // 4
+        packed = np.zeros(packed_shape, dtype=np.uint8)
+
+        flat_quantized = quantized.flatten()
+        for i in range(len(flat_quantized)):
+            byte_idx = i // 4
+            shift = (i % 4) * 2
+            if byte_idx < len(packed):
+                packed[byte_idx] |= (flat_quantized[i] << shift)
+
+        return BitTensor(
+            data=packed,
+            shape=tensor.shape,
+            bits=2,
+            scale=scale,
+            zero_point=0.0
+        )
+
     @staticmethod
     def quantize_1bit(tensor: np.ndarray) -> BitTensor:
         """
